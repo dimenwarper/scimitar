@@ -1,13 +1,14 @@
+from collections import defaultdict
 import numpy as np
 import networkx as nx
-import morphing_mixture
 import random
-import model_comparisons
-import utils
+
 from sklearn.covariance import OAS
-from utils import create_state_index
 from sklearn.mixture import GMM
-from collections import defaultdict
+
+from . import morphing_mixture
+from . import model_comparisons
+from . import utils
 
 class StateDecomposition(object):
     def __init__(self, state_model, state_edges, edge_weights={}):
@@ -30,7 +31,7 @@ class StateDecomposition(object):
         data_to_state = {}
         state_to_data = defaultdict(list)
         for i, idx in enumerate(memberships):
-            state_idx = create_state_index(idx)
+            state_idx = utils.create_state_index(idx)
             data_to_state[i] = state_idx          
             state_to_data[state_idx].append(i) 
         return data_to_state, state_to_data
@@ -97,7 +98,7 @@ def get_gmm_state_decomposition(data, n_states=3, covariance_type='diag',
         gmm = _gmm_from_memberships(data, memberships, covariance_type)
     gmm.centroids = gmm.means_
     state_edges = utils.get_data_delaunay_from_gmm(data, gmm, min_paths=min_paths)
-    return StateDecomposition(gmm, [(create_state_index(i), create_state_index(j)) for i, j in state_edges])
+    return StateDecomposition(gmm, [(utils.create_state_index(i), utils.create_state_index(j)) for i, j in state_edges])
 
 def get_gmm_bootstrapped_decomposition(data_array, n_states, n_boot, 
                                        memberships=None, **kwargs):

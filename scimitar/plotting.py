@@ -1,12 +1,16 @@
+from collections import defaultdict
+
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from collections import defaultdict
+
 from scipy.spatial.distance import pdist
 from scipy.cluster.hierarchy import fcluster, linkage
 from scipy.stats import zscore
+
 from sklearn.manifold import LocallyLinearEmbedding
-import settings
+
+from . import settings
 
 def choose_2d_embedding(data, n_neighbors=None):
     if n_neighbors is None:

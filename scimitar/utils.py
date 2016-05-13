@@ -1,8 +1,10 @@
+from collections import defaultdict, namedtuple
 import numpy as np
 import networkx as nx
-import settings
-from collections import defaultdict, namedtuple
+
 from scipy.spatial.distance import pdist, squareform
+
+from . import settings
 
 StateIndex = namedtuple('StateIndex', 'index color')
 def create_state_index(idx):

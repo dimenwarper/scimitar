@@ -1,8 +1,9 @@
 from collections import defaultdict, Counter
 from numpy.linalg import norm
-from utils import create_state_index
 import munkres
 import numpy as np
+
+from . import utils
 
 def align_state_decompositions(state_decom_1, state_decom_2):
     state_mapping = {}
@@ -16,7 +17,7 @@ def align_state_decompositions(state_decom_1, state_decom_2):
             state_dist_matrix[i, j] = norm(s1 - s2)
     munkres_runner = munkres.Munkres()
     for idx1, idx2 in munkres_runner.compute(state_dist_matrix.tolist()):
-        state_mapping[create_state_index(idx1)] = create_state_index(idx2)
+        state_mapping[utils.create_state_index(idx1)] = utils.create_state_index(idx2)
     for s1, s2 in state_mapping.iteritems():
         mapping_scores[s1] = state_dist_matrix[s1.index, s2.index]
     for s1_1, s1_2 in state_decom_1.state_edges:

@@ -1,7 +1,8 @@
 import pandas as pd
 import numpy as np
-import models
-import plotting
+
+from . import models
+from . import plotting
 
 
 def _print_with_options(print_str, options):
