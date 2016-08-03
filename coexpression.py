@@ -16,4 +16,5 @@ def get_degrees_by_gene(corr_matrices):
     for i in xrange(corr_matrices.shape[0]):
         for gene in xrange(corr_matrices.shape[1]):
             degrees[i, gene] = abs(corr_matrices[i, gene, :]).sum()
+    return degrees
 

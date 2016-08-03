@@ -47,3 +47,50 @@ def transition_f_test(data_array, transition_model, pseudotimes,
         pvals[gene] = scipy.stats.f.sf(F, d1, d2)
     return pvals
 
+def progression_association_lr_test(data_array, means, variances, method='bootstrap', 
+                       n_boot=1000):
+    n_samples = data_array.shape[0]
+    n_variables = data_array.shape[1]
+    
+    pvals = np.ones([n_variables])
+    lrs = {}
+    null_vars = {}
+    null_means = {}
+    for variable in xrange(n_variables):
+            null_vars[variable] = data_array[:, variable].var()
+            null_means[variable] = data_array[:, variable].mean() 
+            
+            log_probs = np.array([scipy.stats.norm.logpdf(data_array[:, variable], loc=means[i, variable], 
+                                                     scale=variances[i, variable]**0.5)
+                                           for i in xrange(means.shape[0])])
+            log_p = np.array([np.argmax(log_probs[:, i]) for i in xrange(n_samples)])
+            
+            null_log_p = scipy.stats.norm.logpdf(data_array[:, variable], loc=null_means[variable], 
+                                                 scale=null_vars[variable]**0.5)
+            lrs[variable] = null_log_p.sum() - log_p.sum()
+    if method == 'bootstrap':
+        for variable in xrange(n_variables):
+            boot_ratios = np.zeros([n_boot])
+            for boot_iter in xrange(n_boot):
+                boot_samples = scipy.stats.norm.rvs(loc=null_means[variable], scale=null_vars[variable]**0.5,
+                                                    size=n_samples)
+                null_boot_log_p = scipy.stats.norm.logpdf(boot_samples, loc=null_means[variable], 
+                                                          scale=null_vars[variable]**0.5)
+                
+                boot_log_probs = np.array([scipy.stats.norm.logpdf(boot_samples, loc=means[i, variable], 
+                                                     scale=variances[i, variable]**0.5)
+                                           for i in xrange(means.shape[0])])
+                boot_log_p = np.array([np.argmax(boot_log_probs[:, i]) for i in xrange(n_samples)])
+                boot_ratios[boot_iter] = null_boot_log_p.sum() - boot_log_p.sum()
+            boot_mean, boot_std = boot_ratios.mean(), boot_ratios.std()
+            pval = scipy.stats.norm.pdf(lrs[variable], loc=boot_mean, scale=boot_std)
+            if boot_mean < lrs[variable]:
+                pvals[variable] = pval
+            else:
+                pvals[variable] = 1 - pval
+            print sum(boot_ratios > lrs[variable]), pvals[variable]
+    else:
+        #TODO Should include the chisq approximation here
+        raise ValueError('No method for progression association testing %s is available' % method)
+    return pvals
+

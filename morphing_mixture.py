@@ -4,9 +4,9 @@ import utils
 from principal_curves import PrincipalCurve
 from scipy.interpolate import UnivariateSpline
 from sklearn import gaussian_process
+from sklearn.manifold import LocallyLinearEmbedding
 from sklearn.mixture import GMM
-from sklearn.covariance import OAS
-from pyroconductor import corpcor
+from pyroconductor import corpcor, glasso
 from scipy.spatial.distance import pdist, squareform
 from scipy import stats
 from numpy.linalg import norm
@@ -15,7 +15,8 @@ warnings.simplefilter('ignore', np.RankWarning)
 
 class MorphingGaussianMixture(object):
     def __init__(self, mean_funs_per_dim, cholesky_funs_per_dim, fit_type, degree,
-                 reference_timepoints=None, mean_coeffs=None, chol_coeffs=None):
+                 reference_timepoints=None, mean_coeffs=None, chol_coeffs=None,
+                 cov_estimator='corpcor'):
         self.mean_coeffs = mean_coeffs
         self.chol_coeffs = chol_coeffs
         self.mean_funs = mean_funs_per_dim
@@ -24,6 +25,7 @@ class MorphingGaussianMixture(object):
         self.reference_timepoints = reference_timepoints
         self.fit_type = fit_type
         self.degree = degree
+        self.cov_estimator = cov_estimator
     
     def _calculate_mean(self, t):
         return [self.mean_funs[i](t) for i in xrange(self.ndimensions)]
@@ -94,25 +96,29 @@ class MorphingGaussianMixture(object):
         pseudotimes = np.zeros([samples.shape[0]])
         means = self.mean(timepoints)
         covs = self.covariance(timepoints)
-        pds = np.zeros([samples.shape[0], len(timepoints)])
+        pt_probs = np.zeros([samples.shape[0], len(timepoints)])
         for j, t in enumerate(timepoints):
-            pds[:, j] = stats.multivariate_normal.logpdf(samples, mean=means[j,:], cov=covs[j,:,:], allow_singular=True)
+            pt_probs[:, j] = stats.multivariate_normal.pdf(samples, mean=means[j,:], cov=covs[j,:,:], allow_singular=True)
         
         for i in xrange(samples.shape[0]):
-            j = np.argmax(pds[i, :])
+            j = np.argmax(pt_probs[i, :])
             pseudotimes[i] = timepoints[j]
-        return np.array(pseudotimes)
+        return np.array(pseudotimes), pt_probs
     
-    def refine(self, data_array, max_iter=10):
+    def refine(self, data_array, max_iter=10, **kwargs):
         current_transition_model = self
         print 'Initializing'
-        prev_pseudotimes = self.map_samples_to_pseudotime(data_array)
+        prev_pseudotimes, prev_pt_probs = self.map_samples_to_pseudotime(data_array)
+        current_pseudotimes = prev_pseudotimes
+        R = 0
         for i in xrange(max_iter):
             print 'Iteration %s' % i 
             current_transition_model = morphing_mixture_from_pseudotime(data_array,
-                                                            prev_pseudotimes, fit_type=self.fit_type, degree=self.degree)
-            current_pseudotimes = current_transition_model.map_samples_to_pseudotime(data_array)
-            R = abs(stats.pearsonr(current_pseudotimes, prev_pseudotimes)[0])
+                                                            prev_pseudotimes, 
+                                                            prev_pt_probs,
+                                                            fit_type=self.fit_type, degree=self.degree, **kwargs)
+            current_pseudotimes, curr_pt_probs = current_transition_model.map_samples_to_pseudotime(data_array)
+            R = abs(stats.spearmanr(current_pseudotimes, prev_pseudotimes)[0])
             print 'R: %s' % R
             if R >= 0.9:
                 print 'Converged!'
@@ -121,6 +127,10 @@ class MorphingGaussianMixture(object):
         print 'Final R: %s' % R
         return current_transition_model, current_pseudotimes
 
+    def fit(self, data_array):
+        _mgm = morphing_gaussian_from_embedding(data_array, cov_estimator=self.cov_estimator)
+        self.__dict__.update(_mgm.__dict__)
+
     
 def get_1d_ordering(data_array, means, covariances, covariance_type):
     """
@@ -128,14 +138,14 @@ def get_1d_ordering(data_array, means, covariances, covariance_type):
     gmm.means_ = means
     gmm.covars_ = covariances
     gmm.weights_ = np.array([1./len(means)]*len(means))
-    data_delaunay = utils.get_data_delaunay_from_gmm(data_array, gmm, 
+    metastable_connections = utils.get_metastable_connections_from_gmm(data_array, gmm, 
                                                      distance='cosine',
                                                      as_graph=True)
     """
     distance_matrix = squareform(pdist(means, 'cosine'))
     g = nx.Graph(distance_matrix)
-    data_delaunay = nx.minimum_spanning_tree(g, weight='weight')
-    paths, path_weighted_lengths = utils.all_pairs_shortest_path_weighted(data_delaunay)
+    metastable_connections = nx.minimum_spanning_tree(g, weight='weight')
+    paths, path_weighted_lengths = utils.all_pairs_shortest_path_weighted(metastable_connections)
     max_len = 0
     for n1 in paths:
         for n2 in paths[n1]:
@@ -144,11 +154,11 @@ def get_1d_ordering(data_array, means, covariances, covariance_type):
                 source = n1
                 target = n2
     max_len = 0
-    for path in nx.all_simple_paths(data_delaunay, source, target):
+    for path in nx.all_simple_paths(metastable_connections, source, target):
         if len(path) > max_len:
             max_len = len(path)
             diameter_path = path
-            if max_len == data_delaunay.number_of_nodes():
+            if max_len == metastable_connections.number_of_nodes():
                 break
     print max_len, diameter_path
     t = 0.
@@ -156,7 +166,7 @@ def get_1d_ordering(data_array, means, covariances, covariance_type):
     order = [source]
     diameter_path = paths[source][target]
     for i in xrange(1, len(diameter_path)):
-        t += data_delaunay[diameter_path[i-1]][diameter_path[i]]['weight']
+        t += metastable_connections[diameter_path[i-1]][diameter_path[i]]['weight']
         timepoints.append(t)
         order.append(diameter_path[i])
     timepoints = np.array(timepoints).T
@@ -183,7 +193,7 @@ def state_interpolation(data_array, means, covariances,
     mean_funs = {}
     chol_funs = {}
     
-    if fit_type == 'gaussian_process':
+    if 'gaussian_process' in fit_type:
         timepoints = np.array([timepoints]).T
     else:
         dim = len(means[0,:])
@@ -199,9 +209,14 @@ def state_interpolation(data_array, means, covariances,
             spl = UnivariateSpline(timepoints, sorted_means[:, i], k=degree, w=sorted_covariances[:, i, i])
             mean_funs[i] = lambda t, fun=spl: fun(t)
              
-        elif fit_type == 'gaussian_process':
-            gp = gaussian_process.GaussianProcess(theta0=1e-2, thetaL=1e-4, thetaU=1e-1, 
-                                                  nugget=sorted_covariances[:, i , i])
+        elif 'gaussian_process' in fit_type:
+            if 'naive' in fit_type:
+                gp = gaussian_process.GaussianProcess(theta0=1e-2, thetaL=1e-4, thetaU=1e-1)
+            else:
+                nugget = max(0.01, sorted_means[:, i].std()**2)
+                nugget = nugget/(sorted_means[:, i]**2)
+                gp = gaussian_process.GaussianProcess(theta0=1e-2, thetaL=1e-4, thetaU=1e-1, 
+                                                      nugget=nugget)
             gp.fit(timepoints, sorted_means[:, i])
             mean_funs[i] = lambda t, gp=gp: gp.predict(t)[0]
 
@@ -217,8 +232,13 @@ def state_interpolation(data_array, means, covariances,
                 elif fit_type == 'spline':
                     spl = UnivariateSpline(timepoints, sorted_chols[:, j, i], k=degree)
                     chol_funs[(j, i)] = lambda t, fun=spl: fun(t)
-                elif fit_type == 'gaussian_process':
-                    gp = gaussian_process.GaussianProcess(theta0=1e-2, thetaL=1e-4, thetaU=1e-1)
+                elif 'gaussian_process' in fit_type:
+                    if 'naive' in fit_type:
+                        gp = gaussian_process.GaussianProcess(theta0=1e-2, thetaL=1e-4, thetaU=1e-1)
+                    else:
+                        nugget = max(0.01, sorted_chols[:, j, i].std()**2)
+                        nugget = nugget/(sorted_chols[:, j, i]**2)
+                        gp = gaussian_process.GaussianProcess(theta0=1e-2, thetaL=1e-4, thetaU=1e-1, nugget=nugget)
                     gp.fit(timepoints, sorted_chols[:, j, i])
                     chol_funs[(j, i)] = lambda t, gp=gp: gp.predict(t)[0]
                 else:
@@ -234,15 +254,51 @@ def state_interpolation(data_array, means, covariances,
                                        reference_timepoints=timepoints)
 
 
-def morphing_mixture_from_pseudotime(data_array, pseudotimes, step_size=0.05,
+def morphing_mixture_from_pseudotime(data_array, pseudotimes, pt_probs=None, 
+                                     step_size=0.07,
                                      fit_type='spline', degree=3,
-                                     identity_cov=False):
+                                     cov_estimator='corpcor', cov_reg=None):
     min_pt = pseudotimes.min()
     max_pt = pseudotimes.max()
     means, covariances = [], []
-    cov_estimator = OAS()
     timepoints = []
-    min_win_size = 10
+    for tp in np.arange(min_pt, max_pt, step_size):
+        weights = np.exp(-0.5*((pseudotimes - tp)/(step_size))**2)
+        weights = np.reshape(weights, [len(weights), 1])
+        weights /= weights.sum()
+        weighted_data = weights * data_array
+        means.append(weighted_data.sum(axis=0))
+        if cov_estimator == 'identity':
+            covariances.append(np.eye(data_array.shape[1]))
+        elif cov_estimator == 'diag':
+            covariances.append(np.diag(weighted_data.std(axis=0)**2))
+        elif cov_estimator == 'sample':
+            covariances.append(np.cov(weighted_data.T))
+        elif cov_estimator == 'glasso':
+            if cov_reg is None and tp == min_pt:
+                l1_trace = np.linspace(np.percentile(abs(weighted_data), 5), 
+                                       np.percentile(abs(weighted_data), 50), 10)
+                rhos = np.zeros([len(l1_trace)])
+                loglikes = np.zeros([len(l1_trace)])
+                for i, rho in enumerate(l1_trace):
+                    print 'Doing glasso for rho=%s' % rho
+                    res = glasso.glasso(np.cov(weighted_data.T), rho)
+                    rhos[i] = rho
+                    loglikes[i] = res[2]
+                cov_reg = rhos[np.argmax(loglikes)]
+            res = glasso.glasso(np.cov(weighted_data.T), cov_reg)
+            covariances.append(res[0])
+        elif cov_estimator == 'corpcor':
+            if cov_reg is None:
+                covariances.append(np.copy(corpcor.cov_shrink(data_array, weights=weights)))
+            else:
+                covariances.append(np.copy(corpcor.cov_shrink(data_array, weights=weights, **{'lambda':cov_reg})))
+        else:
+            raise ValueError('Covariance estimator %s not supported' % cov_estimator)
+        timepoints.append(tp)
+
+    '''
+    min_win_size = 15
     for window_start in np.arange(min_pt, max_pt, step_size):
         window_samples = []
         step = 1
@@ -256,14 +312,14 @@ def morphing_mixture_from_pseudotime(data_array, pseudotimes, step_size=0.05,
             window_samples = [i for i, pt in sorted_pseudotimes[-min_win_size:]]
         print 'window size %s' % len(window_samples)
         means.append(data_array[window_samples, :].mean(axis=0))
-        if identity_cov:
+        if cov_estimator == 'identity':
             covariances.append(np.eye(data_array.shape[1]))
         else:
             #cov_estimator.fit(data_array[window_samples, :])
             #covariances.append(np.copy(cov_estimator.covariance_))
             covariances.append(np.copy(corpcor.cov_shrink(data_array[window_samples, :])))
         timepoints.append(window_start)
-
+    '''
     means = np.array(means)
     covariances = np.array(covariances)
     timepoints = np.array(timepoints)/max(timepoints)
@@ -299,8 +355,7 @@ class PrincipalCurveSampler(Sampler):
         return self.current_model
 
         self.current_model = morphing_mixture_from_pseudotime(self.data, 
-                mapping, fit_type=self.fit_type, degree=self.degree,
-                identity_cov=True)
+                mapping, fit_type=self.fit_type, degree=self.degree)
         return self.current_model
 
     def current(self):
@@ -336,6 +391,23 @@ class GMMInterpolationSampler(Sampler):
 
     def current(self):
         return self.current_model
+
+def morphing_gaussian_from_embedding(data_array, n_neighbors=None, 
+                                     cov_estimator='corpcor', **kwargs):
+    if n_neighbors is None:
+        n_neighbors = int(data_array.shape[0] * 0.5)
+    embedding = LocallyLinearEmbedding(n_components=1, n_neighbors=n_neighbors)
+    u, s, v = np.linalg.svd(data_array, full_matrices=1)
+    l = 2
+    denoised_data_array = np.dot(u[:, :l], np.dot(np.diag(s[:l]), v[:l, :]))
+    pseudotimes = embedding.fit_transform(denoised_data_array)
+
+    pseudotimes -= pseudotimes.min()
+    pseudotimes /= pseudotimes.max()
+    mgm = morphing_mixture_from_pseudotime(data_array, 
+                pseudotimes, cov_estimator=cov_estimator, **kwargs)
+    return mgm
+
 
 def sample_morphing_gaussian_mixtures(data_array, method='principal_curve', fit_type='spline', n_iters=1000, degree=3, n_components=5):
     print 'Initializing'

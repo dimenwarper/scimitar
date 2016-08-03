@@ -1,4 +1,4 @@
-from collections import defaultdict
+from collections import defaultdict, Counter
 import numpy as np
 import networkx as nx
 import random
@@ -6,11 +6,12 @@ import random
 from sklearn.covariance import OAS
 from sklearn.mixture import GMM
 
+from . import log
 from . import morphing_mixture
 from . import model_comparisons
 from . import utils
 
-class StateDecomposition(object):
+class MetastableGraph(object):
     def __init__(self, state_model, state_edges, edge_weights={}):
         self.state_edges = state_edges
         self.edge_weights = edge_weights
@@ -51,7 +52,10 @@ class StateDecomposition(object):
                 fit_type=fit_type, degree=degree, 
                 n_components=n_components, n_iters=n_samples, 
                 method=method)
-        return model_opt, trace, analyzed_indices
+        if states is None:
+            return model_opt, trace
+        else:
+            return model_opt, trace, analyzed_indices
 
 def _gmm_from_memberships(data, memberships, covariance_type):
     clusters = set(memberships)
@@ -85,37 +89,60 @@ def _gmm_from_memberships(data, memberships, covariance_type):
     return gmm
 
 
-def get_gmm_state_decomposition(data, n_states=3, covariance_type='diag',
-                                n_init=20, min_paths=3, memberships=None):
+def get_gmm_metastable_graph(data, n_states=None, covariance_type='diag',
+                             n_init=20, 
+                             connection_estimation_method='max_path_distance_diff', 
+                             min_paths=3, memberships=None):
 
     if covariance_type not in ['diag', 'spherical', 'full']:
         raise ValueError('Invalid covariance type %s' % covariance_type)
     if memberships is None:
+        if n_states is None:
+            MAX_STATES = 10
+            MIN_SAMPLES = 3
+            bics = np.zeros([MAX_STATES])
+            bics[:] = np.inf
+            for curr_states in range(2, MAX_STATES):
+                gmm = GMM(n_components=curr_states, params='mc', 
+                        covariance_type=covariance_type, n_init=n_init)
+                gmm.fit(data)
+                found_singleton = False
+                for state, sample_count in Counter(gmm.predict(data)).iteritems():
+                    if sample_count < MIN_SAMPLES:
+                        found_singleton = True
+                        break
+                if not found_singleton:
+                    bics[curr_states] = gmm.bic(data)
+            n_states = int(np.argmin(bics))
+
         gmm = GMM(n_components=n_states, params='mc', 
-              covariance_type=covariance_type, n_init=n_init)
+            covariance_type=covariance_type, n_init=n_init)
         gmm.fit(data)
     else:
         gmm = _gmm_from_memberships(data, memberships, covariance_type)
     gmm.centroids = gmm.means_
-    state_edges = utils.get_data_delaunay_from_gmm(data, gmm, min_paths=min_paths)
-    return StateDecomposition(gmm, [(utils.create_state_index(i), utils.create_state_index(j)) for i, j in state_edges])
+    state_edges = utils.get_metastable_connections_from_gmm(data, gmm, 
+                                                            connection_estimation_method=connection_estimation_method,
+                                                            min_paths=min_paths)
+    return MetastableGraph(gmm, [(utils.create_state_index(i), utils.create_state_index(j)) for i, j in state_edges])
 
-def get_gmm_bootstrapped_decomposition(data_array, n_states, n_boot, 
+def get_gmm_bootstrapped_metastable_graph(data_array, n_states=None, n_boot=100, 
                                        memberships=None, **kwargs):
-    state_decompositions = []
+    metastable_graphs = []
     data_sample_size = data_array.shape[0]
-    full_state_decomposition = get_gmm_state_decomposition(data_array, n_states, 
+    full_metastable_graph = get_gmm_metastable_graph(data_array, n_states, 
                                                            memberships=memberships, **kwargs)
+
+    n_states = full_metastable_graph.state_model.centroids.shape[0]
     for boot_iter in xrange(n_boot):
-        print 'In bootstrap iteration %s' % boot_iter
         sample_indices = [random.choice(range(data_sample_size)) for _ in xrange(data_sample_size)]
         if memberships is None:
             sample_memberships = None
         else:
             sample_memberships = memberships[sample_indices]
-        state_decompositions.append(get_gmm_state_decomposition(data_array[sample_indices, :], n_states, 
+        metastable_graphs.append(get_gmm_metastable_graph(data_array[sample_indices, :], n_states, 
                                                                          memberships=sample_memberships, **kwargs))
-    bootstrap_edge_fractions = model_comparisons.get_edge_fractions([full_state_decomposition] + state_decompositions)
-    return full_state_decomposition, state_decompositions, bootstrap_edge_fractions
+    bootstrap_edge_fractions = model_comparisons.get_edge_fractions([full_metastable_graph] + metastable_graphs)
+    return full_metastable_graph, metastable_graphs, bootstrap_edge_fractions
     
 

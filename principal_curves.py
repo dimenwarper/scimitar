@@ -36,12 +36,13 @@ class PrincipalCurve():
     def fit(self, data_array):
         curr_mapping = _map_data_to_principal_line(data_array)
         curr_error = np.inf
+        dim_weights = 1./data_array.std(axis=0)
         for i in xrange(self.n_iters):    
             curr_curve = np.zeros([len(self.interval), data_array.shape[1]])
             for i, lam in enumerate(self.interval):
                 chosen_indices = np.where((curr_mapping >= lam - self.smooth_thresh) & 
                                         (curr_mapping <= lam + self.smooth_thresh))[0]
-                curr_curve[i, :] = data_array[chosen_indices, :].mean(axis=0)
+                curr_curve[i, :] = dim_weights * data_array[chosen_indices, :].mean(axis=0)
             curr_curve = np.array(curr_curve)
             curr_mapping_indices = _map_data_to_curve(data_array, curr_curve)
             error = ((curr_curve[curr_mapping_indices.astype(int), :] - data_array)**2).sum()

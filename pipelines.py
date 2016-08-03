@@ -34,15 +34,15 @@ def preprocess(data_file, n_selected_genes=2000, log_transform=True, transpose=F
         data_M = np.log(data_M[:, selected_genes] + 1)
     return data_df, data_M
 
-def gmm_state_decomposition(data_file, n_states, preprocessing_options={}, decomposition_options={},
+def gmm_metastable_graphposition(data_file, n_states, preprocessing_options={}, metastable_graph_options={},
                             plotting_options={}):
     _print_with_options('Preprocessing data', preprocessing_options)
     data_df, data_M = preprocess(data_file, **preprocessing_options)
 
-    _print_with_options('Performing state decomposition', decomposition_options)
-    state_decomposition = models.get_gmm_state_decomposition(data_M, n_states, **decomposition_options)
+    _print_with_options('Performing state metastable_graph', metastable_graph_options)
+    metastable_graphposition = models.get_gmm_metastable_graphposition(data_M, n_states, **metastable_graph_options)
     
     _print_with_options('Plotting', plotting_options)
-    membership_colors, embedding = plotting.plot_states(data_M, state_decomposition, **plotting_options)
-    return state_decomposition, data_M, membership_colors, embedding
+    membership_colors, embedding = plotting.plot_states(data_M, metastable_graphposition, **plotting_options)
+    return metastable_graphposition, data_M, membership_colors, embedding
 

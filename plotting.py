@@ -24,46 +24,54 @@ def choose_2d_embedding(data, n_neighbors=None):
 
 
 
-def plot_states(data, state_decomposition, n_neighbors=None, plot_edges=True, 
+def plot_metastable_graph(data, metastable_graph, n_neighbors=None, plot_edges=True, 
                 state_edges=[], edge_weights={}, embedding=None, 
-                memberships=None):
+                memberships=None, scatter_plot_args={}):
     if embedding is None:
         embedding = choose_2d_embedding(data, n_neighbors=n_neighbors)
         transformed = embedding.fit_transform(data)
     else:
         transformed = embedding.transform(data)
     if memberships is None:
-        memberships = state_decomposition.state_model.predict(data)
+        memberships = metastable_graph.state_model.predict(data)
     if not plot_edges:
         plt.scatter(transformed[:, 0], transformed[:, 1], 
                    c=[settings.STATE_COLORS[i] for i in memberships], 
-                   linewidth=0, alpha=0.6)
+                   linewidth=0, alpha=0.6, **scatter_plot_args)
+
+        plt.xlabel('Dimension 1')
+        plt.ylabel('Dimension 2')
     else:
         fig, axarr = plt.subplots(2, sharex=True, sharey=True)
+        fig.add_subplot(111, frameon=False)
         axarr[0].scatter(transformed[:,0], transformed[:, 1], 
                    c=[settings.STATE_COLORS[i] for i in memberships],
-                   linewidth=0, alpha=0.6)
+                   linewidth=0, alpha=0.6, **scatter_plot_args)
         ordered_states = np.unique(memberships)
-        state_centers = [embedding.transform(state_decomposition.state_model.centroids[s])[0] for s in ordered_states]
+        state_centers = [embedding.transform(metastable_graph.state_model.centroids[s])[0] for s in ordered_states]
         sizes = [5000*np.log(1 + (memberships == state).sum()/float(len(memberships))) for state in ordered_states]
         X, Y = [center[0] for center in state_centers], [center[1] for center in state_centers]
         if len(state_edges) == 0:
-            state_edges = state_decomposition.state_edges
+            state_edges = metastable_graph.state_edges
         if len(edge_weights) == 0:
-            edge_weights = state_decomposition.edge_weights
-        for state1, state2 in state_edges:
-            axarr[1].plot([X[state1.index], X[state2.index]], [Y[state1.index], Y[state2.index]],'k-', zorder=1, alpha=0.6)
-            if (state1, state2) in edge_weights:
-                midpoint_X = min(X[state1.index], X[state2.index]) + abs(X[state1.index] - X[state2.index])/2.
-                midpoint_Y = min(Y[state1.index], Y[state2.index]) + abs(Y[state1.index] - Y[state2.index])/2.
-                axarr[1].text(midpoint_X, midpoint_Y, '%s' % (int(edge_weights[(state1, state2)] * 100)) + '%', fontweight='bold', fontsize=12)
+            edge_weights = metastable_graph.edge_weights
+        for states, weight in edge_weights.iteritems():
+            state1, state2 = states
+            axarr[1].plot([X[state1.index], X[state2.index]], [Y[state1.index], Y[state2.index]],'k-', zorder=1, linewidth=max(0.5, 7*weight))
+
+            midpoint_X = min(X[state1.index], X[state2.index]) + abs(X[state1.index] - X[state2.index])/2.
+            midpoint_Y = min(Y[state1.index], Y[state2.index]) + abs(Y[state1.index] - Y[state2.index])/2.
+            axarr[1].text(midpoint_X, midpoint_Y, '%s' % (int(weight * 100)) + '%', fontweight='bold', fontsize=24, color='red')
 
         
         axarr[1].scatter(X, Y, c=[settings.STATE_COLORS[i] for i in ordered_states], s=sizes, linewidth=0, zorder=2)
+
+        plt.xlabel('Dimension 1')
+        plt.ylabel('Dimension 2')
         return np.array([settings.STATE_COLORS[i] for i in memberships]), embedding
 
 def plot_transition_model(data, transition_model, n_neighbors=None, embedding=None, colors='magenta',
-                          plot_errors=True, timepoints=np.arange(0, 1, 0.02)):
+                          plot_errors=True, timepoints=np.arange(0, 1, 0.02), scatter_plot_args={}, error_cmap='Oranges', n_levels=4):
     if embedding is None:
         embedding = choose_2d_embedding(data, n_neighbors=n_neighbors)
         transformed = embedding.fit_transform(data)
@@ -74,23 +82,26 @@ def plot_transition_model(data, transition_model, n_neighbors=None, embedding=No
     interp_mean = embedding.transform(means)
     
     if plot_errors:
-        samples = transition_model.sample_along_timepoints(timepoints, data.shape[0]*2,
+        samples = transition_model.sample_along_timepoints(timepoints, data.shape[0],
                                                         low_dim_means=interp_mean,
                                                         even=True)
         interp_samples = embedding.transform(samples)
 
-        D = pdist(interp_samples)
-        bw = D.mean() - 1.5*D.std()
+        #D = pdist(interp_samples)
+        #bw = D.mean() - 1.5*D.std()
         X_kde = np.concatenate((interp_samples[:, 0], transformed[:, 0]))
         Y_kde = np.concatenate((interp_samples[:, 1], transformed[:, 1]))
-        sns.kdeplot(X_kde, Y_kde, cut=1, n_levels=4, 
-                    shade_lowest=False, shade=True, cmap='Greens')
-    plt.scatter(transformed[:, 0], transformed[:, 1], color=colors, linewidth=0., alpha=0.5)
+        sns.kdeplot(X_kde, Y_kde, cut=1, n_levels=n_levels, 
+                    shade_lowest=False, shade=True, cmap=error_cmap)
+    plt.scatter(transformed[:, 0], transformed[:, 1], color=colors, **scatter_plot_args)
     plt.scatter(interp_mean[:, 0], interp_mean[:, 1], marker=(5, 2), color='black')
     for i in xrange(1, interp_mean.shape[0]):
         plt.plot([interp_mean[i-1, 0], interp_mean[i, 0]], 
                  [interp_mean[i-1, 1], interp_mean[i, 1]], color='black',
                  linewidth=3)
+
+    plt.xlabel('Dimension 1')
+    plt.ylabel('Dimension 2')
     return embedding
 
 def plot_gene_clustermap_by_membership(data_array, memberships):
@@ -135,11 +146,11 @@ def plot_transition_clustermap(data_array, gene_names, pseudotimes, n_clusters=1
     return gene_clusters
 
 def plot_transition_expression(gene_expression, model_means, model_variances,
-                               pseudotimes, timepoints, color='black', ax=None):
+                               pseudotimes, timepoints, s=30, alpha=0.6, color='black', ax=None):
     if ax is None:
         ax = plt.subplot(111)
     plt.scatter(pseudotimes, gene_expression, 
-                color=color, alpha=0.6)
+                color=color, s=s, alpha=0.3)
     ax.plot(timepoints, model_means, linewidth=2)
     ax.fill_between(timepoints, model_means - model_variances**0.5, 
                      model_means + model_variances**0.5, 
