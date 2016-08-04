@@ -9,4 +9,4 @@ To install SCIMITAR, follow the steps below:
 
 3. Check out the jupyter notebooks tutorials in the tutorials directory
 
-4. Questions, concerns, or suggestions? Thanks! Open up a ticket or pm @dimenwarper (Pablo Cordero)
+4. Questions, concerns, or suggestions? Thanks! Open up a ticket or pm [@dimenwarper](https://github.com/dimenwarper) (Pablo Cordero)
