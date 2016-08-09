@@ -29,8 +29,7 @@ def p_adjust(pvals, threshold, correction_method='BH'):
     return corr_pvals, genes_sorted_by_pval
  
 
-def transition_f_test(data_array, transition_model, pseudotimes,
-                      correction_method='BH', threshold=0.):
+def progression_association_f_test(data_array, transition_model, pseudotimes):
     n_samples = data_array.shape[0]
     
     fit_means = transition_model.mean(pseudotimes)

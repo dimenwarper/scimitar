@@ -14,17 +14,23 @@ import warnings
 warnings.simplefilter('ignore', np.RankWarning)
 
 class MorphingGaussianMixture(object):
-    def __init__(self, mean_funs_per_dim, cholesky_funs_per_dim, fit_type, degree,
-                 reference_timepoints=None, mean_coeffs=None, chol_coeffs=None,
+    def __init__(self, mean_funs=None, cholesky_funs=None, 
+                 fit_type='spline', degree=3, cov_reg=0.01,
+                 step_size=0.07,
+                 reference_timepoints=np.arange(0, 1, 0.01), 
+                 mean_coeffs=None, chol_coeffs=None,
                  cov_estimator='corpcor'):
         self.mean_coeffs = mean_coeffs
         self.chol_coeffs = chol_coeffs
-        self.mean_funs = mean_funs_per_dim
-        self.cholesky_funs = cholesky_funs_per_dim
-        self.ndimensions = len(self.mean_funs)
+        self.mean_funs = mean_funs
+        if mean_funs is not None:
+            self.ndimensions = len(mean_funs)
+        self.cholesky_funs = cholesky_funs
         self.reference_timepoints = reference_timepoints
         self.fit_type = fit_type
         self.degree = degree
+        self.cov_reg = cov_reg
+        self.step_size = step_size
         self.cov_estimator = cov_estimator
     
     def _calculate_mean(self, t):
@@ -91,19 +97,19 @@ class MorphingGaussianMixture(object):
             #res += np.log(max(integral(samples[:, i], x=integration_range), 1e-100))
         return res
 
-    def map_samples_to_pseudotime(self, samples, 
+    def map_samples_to_pseudotime(self, samples,
                                   timepoints=np.arange(-0.5,1.5,0.01)):
         pseudotimes = np.zeros([samples.shape[0]])
         means = self.mean(timepoints)
         covs = self.covariance(timepoints)
         pt_probs = np.zeros([samples.shape[0], len(timepoints)])
         for j, t in enumerate(timepoints):
-            pt_probs[:, j] = stats.multivariate_normal.pdf(samples, mean=means[j,:], cov=covs[j,:,:], allow_singular=True)
+            pt_probs[:, j] = stats.multivariate_normal.logpdf(samples, mean=means[j,:], cov=covs[j,:,:], allow_singular=True)
         
         for i in xrange(samples.shape[0]):
             j = np.argmax(pt_probs[i, :])
             pseudotimes[i] = timepoints[j]
-        return np.array(pseudotimes), pt_probs
+        return pseudotimes, pt_probs
     
     def refine(self, data_array, max_iter=10, **kwargs):
         current_transition_model = self
@@ -115,7 +121,7 @@ class MorphingGaussianMixture(object):
             print 'Iteration %s' % i 
             current_transition_model = morphing_mixture_from_pseudotime(data_array,
                                                             prev_pseudotimes, 
-                                                            prev_pt_probs,
+                                                            pt_probs=prev_pt_probs,
                                                             fit_type=self.fit_type, degree=self.degree, **kwargs)
             current_pseudotimes, curr_pt_probs = current_transition_model.map_samples_to_pseudotime(data_array)
             R = abs(stats.spearmanr(current_pseudotimes, prev_pseudotimes)[0])
@@ -128,8 +134,14 @@ class MorphingGaussianMixture(object):
         return current_transition_model, current_pseudotimes
 
     def fit(self, data_array):
-        _mgm = morphing_gaussian_from_embedding(data_array, cov_estimator=self.cov_estimator)
+        _mgm = morphing_gaussian_from_embedding(data_array, 
+                                                cov_estimator=self.cov_estimator,
+                                                fit_type=self.fit_type,
+                                                degree=self.degree,
+                                                step_size=self.step_size,
+                                                cov_reg=self.cov_reg)
         self.__dict__.update(_mgm.__dict__)
+        self.ndimensions = data_array.shape[1]
 
     
 def get_1d_ordering(data_array, means, covariances, covariance_type):

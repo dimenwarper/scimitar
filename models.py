@@ -38,9 +38,7 @@ class MetastableGraph(object):
         return data_to_state, state_to_data
 
     def fit_transition_model(self, data_array, states=None, 
-                            fit_type='spline', degree=3, 
-                            n_components=5, n_samples=10, 
-                            method='principal_curve'):
+                            fit_type='spline', degree=3):
         if states is None:
             data_to_analyze = data_array
         else:
@@ -48,14 +46,13 @@ class MetastableGraph(object):
             analyzed_indices = [i for i in xrange(data_array.shape[0]) 
                                 if data_to_state[i].index in states or data_to_state[i].color in states]
             data_to_analyze = np.array(data_array[analyzed_indices, :])
-        trace, model_opt, log_p_opt = morphing_mixture.sample_morphing_gaussian_mixtures(data_to_analyze, 
-                fit_type=fit_type, degree=degree, 
-                n_components=n_components, n_iters=n_samples, 
-                method=method)
+        mgm = morphing_mixture.MorphingGaussianMixture(fit_type=fit_type, 
+                                                       degree=degree)
+        mgm.fit(data_to_analyze)
         if states is None:
-            return model_opt, trace
+            return mgm
         else:
-            return model_opt, trace, analyzed_indices
+            return mgm, analyzed_indices
 
 def _gmm_from_memberships(data, memberships, covariance_type):
     clusters = set(memberships)
@@ -90,7 +87,7 @@ def _gmm_from_memberships(data, memberships, covariance_type):
 
 
 def get_gmm_metastable_graph(data, n_states=None, covariance_type='diag',
-                             n_init=20, 
+                             n_init=30, 
                              connection_estimation_method='max_path_distance_diff', 
                              min_paths=3, memberships=None):
 
@@ -113,7 +110,7 @@ def get_gmm_metastable_graph(data, n_states=None, covariance_type='diag',
                         break
                 if not found_singleton:
                     bics[curr_states] = gmm.bic(data)
-            n_states = int(np.argmin(bics))
+            n_states = max(1, int(np.argmin(bics)) - 1)
 
         gmm = GMM(n_components=n_states, params='mc', 
             covariance_type=covariance_type, n_init=n_init)

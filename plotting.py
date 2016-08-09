@@ -43,10 +43,12 @@ def plot_metastable_graph(data, metastable_graph, n_neighbors=None, plot_edges=T
         plt.ylabel('Dimension 2')
     else:
         fig, axarr = plt.subplots(2, sharex=True, sharey=True)
-        fig.add_subplot(111, frameon=False)
         axarr[0].scatter(transformed[:,0], transformed[:, 1], 
                    c=[settings.STATE_COLORS[i] for i in memberships],
                    linewidth=0, alpha=0.6, **scatter_plot_args)
+        axarr[0].set_xticks([])
+        axarr[0].set_yticks([])
+        sns.despine()
         ordered_states = np.unique(memberships)
         state_centers = [embedding.transform(metastable_graph.state_model.centroids[s])[0] for s in ordered_states]
         sizes = [5000*np.log(1 + (memberships == state).sum()/float(len(memberships))) for state in ordered_states]
@@ -66,6 +68,11 @@ def plot_metastable_graph(data, metastable_graph, n_neighbors=None, plot_edges=T
         
         axarr[1].scatter(X, Y, c=[settings.STATE_COLORS[i] for i in ordered_states], s=sizes, linewidth=0, zorder=2)
 
+        axarr[1].set_xticks([])
+        axarr[1].set_yticks([])
+        sns.despine()
+        fig.add_subplot(111, frameon=False)
+        plt.tick_params(labelcolor='none', top='off', bottom='off', left='off', right='off')
         plt.xlabel('Dimension 1')
         plt.ylabel('Dimension 2')
         return np.array([settings.STATE_COLORS[i] for i in memberships]), embedding
@@ -102,6 +109,9 @@ def plot_transition_model(data, transition_model, n_neighbors=None, embedding=No
 
     plt.xlabel('Dimension 1')
     plt.ylabel('Dimension 2')
+    plt.xticks([])
+    plt.yticks([])
+    sns.despine()
     return embedding
 
 def plot_gene_clustermap_by_membership(data_array, memberships):

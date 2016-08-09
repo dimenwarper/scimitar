@@ -5,6 +5,7 @@ import networkx as nx
 
 from scipy.spatial.distance import pdist, squareform
 from sklearn.decomposition import PCA
+from sklearn.manifold import LocallyLinearEmbedding
 
 from . import settings
 from . import stats
@@ -34,7 +35,9 @@ def get_metastable_connections_from_gmm(data, gmm,
     if connection_estimation_method in ['max_path_distance_diff', 'connecting_paths', 'mst']:
         if low_dimension_distances:
             pca = PCA(n_components=2)
-            distance_matrix = squareform(pdist(pca.fit_transform(data), distance))
+            lle = LocallyLinearEmbedding(n_components=2, 
+                                         n_neighbors=int(0.8*data.shape[0]))
+            distance_matrix = squareform(pdist(lle.fit_transform(data), distance))
         else:
             distance_matrix = squareform(pdist(data, distance))
         weighted_graph = nx.Graph(distance_matrix)
