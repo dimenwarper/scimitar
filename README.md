@@ -1,4 +1,4 @@
-# SCIMITAR
+<img src="https://lh3.googleusercontent.com/dqsSqpn5TyjoFZimQC5PIDPJt9kN965o_Nbi25N_JrOz31TRzkl3ce272sAGLdJdY9zvSppxbdtq0_c=w1510-h786-rw" width="300">
 ## The Single Cell Inference of MorphIng Transitions and Associated Regulation module
 
 To install SCIMITAR, follow the steps below:
