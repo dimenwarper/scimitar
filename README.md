@@ -1,5 +1,5 @@
 <img src="https://www.googledrive.com/host/0B7gNxpQ1pKx9dGJEZVJTamdZUjA" width="300">
-## The Single Cell Inference of MorphIng Transitions and Associated Regulation module
+## Single Cell Inference of MorphIng Trajectories and their Associated Regulation module
 
 SCIMITAR provides a variety of tools to analyze trajectory maps of single-cell measurements. 
 
