@@ -6,6 +6,6 @@ setup(name='scimitar',
         author='Pablo Cordero',
         author_email='dimenwarper@gmail.com',
         url='https://github.com/dimenwarper/scimitar',
-        packages=['coexpression', 'model_comparisons', 'plotting', 'simulation', 'differential_analysis', 'models', 'preprocessing', 'stats', 'morphing_mixture', 'principal_curves', 'utils', 'log', 'pipelines', 'settings'],
+        packages=['scimitar'],
         install_requires=['numpy', 'scipy', 'scikit-learn', 'networkx', 'matplotlib', 'pandas', 'seaborn', 'munkres']
         )
