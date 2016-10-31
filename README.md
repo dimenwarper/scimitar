@@ -1,4 +1,4 @@
-<img src="https://lh5.googleusercontent.com/fEgVyWU7EWgvyRC-ZChupfpf1FalFeWSujN7ugwpqIwKkUAAi9410Z5PGUD0Gmw07KqITWWi6fcW_zY=w1829-h919-rw" width="300">
+<img src="https://github.com/dimenwarper/scimitar/raw/master/logo.png" width="300">
 ## Single Cell Inference of MorphIng Trajectories and their Associated Regulation module
 
 SCIMITAR provides a variety of tools to analyze trajectory maps of single-cell measurements. 
