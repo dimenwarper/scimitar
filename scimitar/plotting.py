@@ -155,25 +155,39 @@ def plot_transition_clustermap(data_array, gene_names, pseudotimes, n_clusters=1
         gene_clusters[settings.STATE_COLORS[cl]].append(gene_names[i])
     return gene_clusters
 
-def plot_transition_expression(gene_expression, model_means, model_variances,
-                               pseudotimes, timepoints, s=30, alpha=0.6, color='black', ax=None):
+
+def plot_transition_expression(gene_expression, model_means,
+                               pseudotimes, timepoints, s=200, alpha=0.4, color='black',
+                               model_variances=None, ax=None):
     if ax is None:
         ax = plt.subplot(111)
     plt.scatter(pseudotimes, gene_expression, 
                 color=color, s=s, alpha=0.3)
-    ax.plot(timepoints, model_means, linewidth=2)
-    ax.fill_between(timepoints, model_means - model_variances**0.5, 
-                     model_means + model_variances**0.5, 
-                     color='blue', alpha=0.2)
+    ax.plot(timepoints, model_means, linewidth=3)
+    if model_variances is not None:
+        ax.fill_between(timepoints, model_means - model_variances**0.5, 
+                        model_means + model_variances**0.5, 
+                        color='blue', alpha=0.2)
 
     plt.xlabel('Pseudotime')
     plt.ylabel('Expression')
+    return ax
 
-def plot_transition_coexpression_expression(timepoints, degrees):
-    ax = plt.subplot(211)
-    ax.plot(timepoints, degrees, linewidth=5)
-    plt.ylabel('Co-expression degree')
+def plot_coregulatory_states(coreg_states):
+    for ci, coreg_state in coreg_states.iteritems():
+        cm = sns.clustermap(coreg_state)
+        plt.title(ci)
+        cm.ax_heatmap.set_xticks([])
+        cm.ax_heatmap.set_yticks([])            
 
-    plt.xlim(0, 1.)
-    ax = plt.subplot(212)
+
+
+def plot_coregulatory_similarity(similarity_matrix):
+    sns.heatmap(similarity_matrix, cmap=plt.get_cmap('Blues'))
+    plt.xticks([])
+    plt.yticks([])
+    plt.xlabel('Pseudotime')
+    plt.ylabel('Pseudotime')
+
+
 

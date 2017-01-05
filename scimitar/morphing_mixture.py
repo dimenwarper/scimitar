@@ -286,6 +286,8 @@ def morphing_mixture_from_pseudotime(data_array, pseudotimes, pt_probs=None,
             covariances.append(np.diag(weighted_data.std(axis=0)**2))
         elif cov_estimator == 'sample':
             covariances.append(np.cov(weighted_data.T))
+        elif cov_estimator == 'global':
+            covariances.append(np.cov(data_array.T))
         elif cov_estimator == 'glasso':
             if cov_reg is None and tp == min_pt:
                 l1_trace = np.linspace(np.percentile(abs(weighted_data), 5), 
@@ -300,41 +302,24 @@ def morphing_mixture_from_pseudotime(data_array, pseudotimes, pt_probs=None,
                 cov_reg = rhos[np.argmax(loglikes)]
             res = glasso.glasso(np.cov(weighted_data.T), cov_reg)
             covariances.append(res[0])
-        elif cov_estimator == 'corpcor':
+        elif cov_estimator == 'corpcor' or cov_estimator == 'average':
             if cov_reg is None:
                 covariances.append(np.copy(corpcor.cov_shrink(data_array, weights=weights)))
             else:
                 covariances.append(np.copy(corpcor.cov_shrink(data_array, weights=weights, **{'lambda':cov_reg})))
         else:
             raise ValueError('Covariance estimator %s not supported' % cov_estimator)
+        
         timepoints.append(tp)
 
-    '''
-    min_win_size = 15
-    for window_start in np.arange(min_pt, max_pt, step_size):
-        window_samples = []
-        step = 1
-        while len(window_samples) < min_win_size and step * step_size < max_pt:
-            window_samples = np.where((pseudotimes >= window_start) &
-                                      (pseudotimes <= step * step_size))[0]
-            step += 1
-        
-        if len(window_samples) < min_win_size:
-            sorted_pseudotimes = sorted(enumerate(pseudotimes), key=lambda x:x[1])
-            window_samples = [i for i, pt in sorted_pseudotimes[-min_win_size:]]
-        print 'window size %s' % len(window_samples)
-        means.append(data_array[window_samples, :].mean(axis=0))
-        if cov_estimator == 'identity':
-            covariances.append(np.eye(data_array.shape[1]))
-        else:
-            #cov_estimator.fit(data_array[window_samples, :])
-            #covariances.append(np.copy(cov_estimator.covariance_))
-            covariances.append(np.copy(corpcor.cov_shrink(data_array[window_samples, :])))
-        timepoints.append(window_start)
-    '''
     means = np.array(means)
     covariances = np.array(covariances)
     timepoints = np.array(timepoints)/max(timepoints)
+
+    if cov_estimator == 'average':
+        cov_avg = covariances.mean(axis=0)
+        for i in xrange(covariances.shape[0]):
+            covariances[i, :, :] = cov_avg
     return state_interpolation(data_array, means, covariances, 
                                fit_type=fit_type, degree=degree,
                                timepoints=timepoints)
