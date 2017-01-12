@@ -87,7 +87,6 @@ def progression_association_lr_test(data_array, means, variances, method='bootst
                 pvals[variable] = pval
             else:
                 pvals[variable] = 1 - pval
-            print sum(boot_ratios > lrs[variable]), pvals[variable]
     else:
         #TODO Should include the chisq approximation here
         raise ValueError('No method for progression association testing %s is available' % method)

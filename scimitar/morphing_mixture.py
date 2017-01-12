@@ -391,6 +391,12 @@ class GMMInterpolationSampler(Sampler):
 
 def morphing_gaussian_from_embedding(data_array, n_neighbors=None, 
                                      cov_estimator='corpcor', **kwargs):
+    pseudotimes = pseudotimes_from_embedding(data_array, n_neighbors=n_neighbors)
+    mgm = morphing_mixture_from_pseudotime(data_array, 
+                pseudotimes, cov_estimator=cov_estimator, **kwargs)
+    return mgm
+
+def pseudotimes_from_embedding(data_array, n_neighbors=None):
     if n_neighbors is None:
         n_neighbors = int(data_array.shape[0] * 0.5)
     embedding = LocallyLinearEmbedding(n_components=1, n_neighbors=n_neighbors)
@@ -401,9 +407,7 @@ def morphing_gaussian_from_embedding(data_array, n_neighbors=None,
 
     pseudotimes -= pseudotimes.min()
     pseudotimes /= pseudotimes.max()
-    mgm = morphing_mixture_from_pseudotime(data_array, 
-                pseudotimes, cov_estimator=cov_estimator, **kwargs)
-    return mgm
+    return pseudotimes
 
 
 def sample_morphing_gaussian_mixtures(data_array, method='principal_curve', fit_type='spline', n_iters=1000, degree=3, n_components=5):
