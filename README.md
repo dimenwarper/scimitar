@@ -21,3 +21,8 @@ To install SCIMITAR, follow the steps below:
 3. Check out the jupyter notebooks tutorials in the tutorials directory
 
 4. Questions, concerns, or suggestions? Thanks! Open up a ticket or pm [@dimenwarper](https://github.com/dimenwarper) (Pablo Cordero)
+
+
+If you use SCIMITAR please cite the [paper](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5203771/) ;)
+
+Cordero and Stuart, "Tracing co-regulatory network dynamics in noisy, single-cell transcriptome trajectories", Pac. Symp. of Biocomput. (2017)
