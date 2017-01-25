@@ -25,4 +25,6 @@ To install SCIMITAR, follow the steps below:
 
 If you use SCIMITAR please cite the [paper](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5203771/) ;)
 
-Cordero and Stuart, "Tracing co-regulatory network dynamics in noisy, single-cell transcriptome trajectories", Pac. Symp. of Biocomput. (2017)
+* Cordero and Stuart, "Tracing co-regulatory network dynamics in noisy, single-cell transcriptome trajectories", Pac. Symp. of Biocomput. (2017)
+
+Also, take a look at the [talk slides](https://docs.google.com/presentation/d/11b7-WIlcvuJNJIUucR8_tc1BCG9D0hr102tlQIt23Oc/edit?usp=sharing).
