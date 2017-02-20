@@ -1,8 +1,7 @@
 from sklearn.cluster import KMeans
-from pyroconductor import corpcor, glasso
+from pyroconductor import corpcor
 import numpy as np
 import networkx as nx
-from scipy.spatial.distance import pdist, squareform
 from scipy import stats
 from scipy import optimize
 from scipy import sparse
@@ -22,49 +21,6 @@ class KMeansPPGenerator(PrincipalPointGenerator):
     def generate_points(self, data_array):
         self.kmeans.fit(data_array)
         return self.kmeans.cluster_centers_
-
-class PrincipalTree(object):
-    def __init__(self, num_nodes, sigma=1, lam=1, 
-                 tol=0.001, max_iter=100):
-        self.max_iter =  max_iter
-        self.num_nodes = num_nodes
-        self.sigma = sigma
-        self.tol = tol
-        self.lam = lam
-        self.principal_point_generator = KMeansPPGenerator(self.num_nodes)
-    
-    def fit(self, data_array):
-        undersampler = KMeansPPGenerator(data_array.shape[0]/2)
-        undsmpl_data_array = undersampler.generate_points(data_array)
-        n_samples = undsmpl_data_array.shape[0]
-        F = self.principal_point_generator.generate_points(undsmpl_data_array).T
-        self.initial_points = np.copy(F.T)
-        R = np.zeros([n_samples, self.num_nodes])
-        ones_vec_num_nodes = np.ones([self.num_nodes])
-        ones_vec_n_samples = np.ones([n_samples])
-        for curr_iter in xrange(self.max_iter):
-            D = squareform(pdist(F.T))
-            G = nx.Graph(D)
-            T = nx.minimum_spanning_tree(G)
-            B = nx.adjacency_matrix(T, weight=None).todense()
-            L = np.diag(np.diag(np.dot(B, ones_vec_num_nodes))) - B
-            for i in xrange(n_samples):
-                Z = np.array([np.exp(-np.linalg.norm(undsmpl_data_array[i,:] - F[:, j])/self.sigma)
-                             for j in xrange(self.num_nodes)])
-                R[i, :] = Z/Z.sum()
-            
-            Lam = np.diag(np.dot(R.T, ones_vec_n_samples))
-            Inv = np.linalg.inv(self.lam*L + Lam)
-            next_F = np.dot(undsmpl_data_array.T, np.dot(R, Inv))
-            if curr_iter % 10 == 0:
-                print 'In iteration %s' % curr_iter
-                print np.linalg.norm(F - next_F)
-            if np.linalg.norm(F - next_F) < self.tol:
-                break
-            F = next_F
-        self.node_positions = np.array(next_F.T)
-        self.tree = T
-        
 
 
 class PrincipalGraph(object):
@@ -94,7 +50,7 @@ class PrincipalGraph(object):
         n_nodes = node_positions.shape[0]
         
         if G is not None:
-            G = sklearn.neighbors.kneighbors_graph(node_positions, self.nn).todense()
+            G = kneighbors_graph(node_positions, self.nn).todense()
 
         
         # construct only once for all iterations
@@ -120,10 +76,10 @@ class PrincipalGraph(object):
                     if i < j:
                         key_ij = j + i * n_nodes
                     pos_ij = rc[key_ij]
-                    a[:, pos_ij] = np.vstack([-data_array[j, :], data_array[j ,:]])
+                    a[:, pos_ij] = np.vstack([-data_array[j, :], data_array[j, :]])
                 start_i = nw + (i - 1) * n_dims + 1
                 end_i = start_i + n_dims - 1
-                a[:, start_i:end_i] = np.vstack([-np.eye[n_dims, n_dims], -eye[n_dims, n_dims]])
+                a[:, start_i:end_i] = np.vstack([-np.eye[n_dims, n_dims], -np.eye[n_dims, n_dims]])
                 bb = np.vstack([-data_array[i, :], data_array[i, :]])
                 if i == 0:
                     A = np.copy(a)
@@ -281,7 +237,6 @@ class BranchingMorphingMixture(object):
             #weights = np.exp(-0.5*(expected_distances/(self.step_size))**2)
             weights = 1./((1 + expected_distances)**2 * self.step_size)
             weights = np.reshape(weights, [len(weights), 1])
-            print weights
             weights /= weights.sum()
             weighted_data = weights * data_array
             means[i, :] = weighted_data.sum(axis=0)
@@ -297,7 +252,7 @@ class BranchingMorphingMixture(object):
         curr_mapping, curr_mapping_probs = self._map_samples_to_nodes(data_array,
                                                                       init_means, init_covs)
         for i in xrange(self.max_iter):
-            print 'ITER %s' % i
+            print('ITER %s' % i)
             curr_means, curr_covs = self._calculate_gaussian_params_from_mapping(data_array, 
                                                                                  curr_mapping, 
                                                                                  curr_mapping_probs)
@@ -306,7 +261,6 @@ class BranchingMorphingMixture(object):
                                                                           curr_means, curr_covs)
             if ((prev_mapping_probs - curr_mapping_probs)**2).sum() < self.tol:
                 break
-                print 'Done!'
         self.mean = curr_means
         self.covariances = curr_covs
         self.mapping_probs = curr_mapping_probs
