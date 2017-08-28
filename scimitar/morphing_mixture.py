@@ -134,7 +134,7 @@ class MorphingGaussianMixture(object):
         return current_transition_model, current_pseudotimes
 
     def fit(self, data_array):
-        _mgm = morphing_gaussian_from_embedding(data_array, 
+        _mgm, self._pseudotimes = morphing_gaussian_from_embedding(data_array, 
                                                 cov_estimator=self.cov_estimator,
                                                 fit_type=self.fit_type,
                                                 degree=self.degree,
@@ -394,7 +394,7 @@ def morphing_gaussian_from_embedding(data_array, n_neighbors=None,
     pseudotimes = pseudotimes_from_embedding(data_array, n_neighbors=n_neighbors)
     mgm = morphing_mixture_from_pseudotime(data_array, 
                 pseudotimes, cov_estimator=cov_estimator, **kwargs)
-    return mgm
+    return mgm, pseudotimes
 
 def pseudotimes_from_embedding(data_array, n_neighbors=None):
     if n_neighbors is None:

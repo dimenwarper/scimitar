@@ -1,12 +1,34 @@
-from sklearn.cluster import KMeans
-from pyroconductor import corpcor
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+from six.moves import range
+
 import numpy as np
-import networkx as nx
+
 from scipy import stats
 from scipy import optimize
 from scipy import sparse
-from sklearn.neighbors import kneighbors_graph
 
+import networkx as nx
+
+from sklearn.cluster import KMeans
+from sklearn.manifold import SpectralEmbedding
+from sklearn.decomposition import PCA
+from sklearn.neighbors import kneighbors_graph, NearestNeighbors
+from sklearn.metrics.pairwise import pairwise_distances
+
+from pyroconductor import corpcor
+
+def adaptive_rbf_matrix(data_array, n_neighbors=30):
+    n_samples = data_array.shape[0]
+    nn = NearestNeighbors(n_neighbors=n_neighbors)
+    nn.fit(data_array)
+    A = pairwise_distances(data_array, metric='l2')
+    
+    n_distances = np.reshape(nn.kneighbors(data_array)[1][:, -1], (n_samples, 1))
+    S = np.dot(n_distances, n_distances.T) / A.mean()
+    A = np.exp(-(A + 1)/(S + 1))
+    return A
 
 
 class PrincipalPointGenerator(object):
@@ -24,7 +46,14 @@ class KMeansPPGenerator(PrincipalPointGenerator):
 
 
 class PrincipalGraph(object):
-    def __init__(self, n_nodes, max_iter=10, eps=1e-5, gstruct='l1-graph', lam=1., gamma=0.5, sigma=0.01,
+    def __init__(self, 
+                 n_nodes, 
+                 max_iter=10, 
+                 eps=1e-5, 
+                 gstruct='l1-graph', 
+                 lam=1., 
+                 gamma=0.5, 
+                 sigma=0.01,
                  nn=5):
         self.max_iter = max_iter
         self.eps = eps
@@ -43,7 +72,7 @@ class PrincipalGraph(object):
         if init_node_pos is None:
             node_positions = self.principal_point_generator.generate_points(data_array)
         else:
-            node_positions = init_node_pos;
+            node_positions = init_node_pos
         
         n_samples, n_dims = data_array.shape
         
@@ -59,12 +88,12 @@ class PrincipalGraph(object):
             # low triangular sum_i sum_{j < i}
             [row, col] = np.tril_indices_from(G)
             nw = len(row)
-            nvar = nw + n_nodes * n_dims;
+            nvar = nw + n_nodes * n_dims
 
             rc = {}
             for i in range(len(row)):
                 key_ij = row[i] + col[i] * n_nodes
-                rc[key_ij] =  i    
+                rc[key_ij] = i    
             
             # construct A and b
             for i in range(n_samples):
@@ -85,8 +114,8 @@ class PrincipalGraph(object):
                     A = np.copy(a)
                     b = np.copy(bb)
                 else:
-                    A = sparse.vstack([A, a]);
-                    b = np.vstack([b, bb]);
+                    A = sparse.vstack([A, a])
+                    b = np.vstack([b, bb])
 
         objs = []
         lp_vars = [] 
@@ -138,6 +167,7 @@ class PrincipalGraph(object):
             
 
             node_positions = self._generate_centers(data_array, W, P)
+        self._probabilities = P
         self.node_positions = node_positions
         self.graph = nx.Graph(W)
 
@@ -166,110 +196,111 @@ class PrincipalGraph(object):
         obj = -self.sigma * sum(np.log((np.exp(-dist_XC / self.sigma)).sum(axis=1)) - (min_dist / self.sigma))
         return P, obj
 
-        
-class BranchingMorphingMixture(object):
 
-    def __init__(self, num_nodes=None, cov_estimator='corpcor', cov_reg=None, tol=0.001, max_iter=10,
-                 step_size=0.01, sigma=0.01, lam=1., gamma=0.5):
-        self.num_nodes = num_nodes
+class BranchedEmbeddedGaussians(object):
+
+    def __init__(self, n_nodes=None, 
+                 npcs=0.8, 
+                 embedding_dims=2,
+                 cov_estimator='corpcor', 
+                 cov_reg=None, 
+                 cov_indices=None,
+                 max_iter=10,
+                 sigma=0.01, 
+                 lam=1., 
+                 gamma=1.,
+                 n_neighbors=30,
+                 just_tree=False):
+        self.n_nodes = n_nodes
         self.cov_reg = cov_reg
         self.cov_estimator = cov_estimator
-        self.tol = tol
+        self.cov_indices = cov_indices
         self.max_iter = max_iter
-        self.step_size = step_size
         self.sigma = sigma
         self.lam = lam
         self.gamma = gamma
+        self.npcs = npcs
+        self.n_neighbors = n_neighbors
+        self.embedding = SpectralEmbedding(n_components=embedding_dims, 
+                                           affinity='precomputed')
+        self.pca = PCA(n_components=self.npcs)
+        self.just_tree = just_tree
 
     def fit(self, data_array):
-        if self.num_nodes is None:
-            self.num_nodes = data_array.shape[0]/2
-        pt = PrincipalGraph(gstruct='span-tree', gamma=self.gamma, sigma=self.sigma, 
-                            lam=self.lam, n_nodes=self.num_nodes)
-        pt.fit(data_array)
-        init_means = pt.node_positions
+        n_samples, n_dims = data_array.shape
+        if self.n_nodes is None:
+            self.n_nodes = 0.1
+        if type(self.n_nodes) == float:
+            self.n_nodes = max(2, np.round(n_samples * self.n_nodes))
+
+        self._pca_tx = self.pca.fit_transform(data_array)
+        self._affinity = adaptive_rbf_matrix(data_array,
+                                             n_neighbors=self.n_neighbors)
+        self._embedding_tx = self.embedding.fit_transform(self._affinity)
+
+        pt = PrincipalGraph(gstruct='span-tree', gamma=self.gamma, 
+                            sigma=self.sigma, max_iter=self.max_iter,
+                            lam=self.lam, n_nodes=self.n_nodes)
+        pt.fit(self._embedding_tx)
         self._pt = pt
-        self.tree = pt.graph
-        self.node_distances = self._calculate_node_distances(self.tree)
-        init_covs = np.zeros([self.num_nodes, data_array.shape[1], data_array.shape[1]])
-        for i in xrange(self.num_nodes):
-            init_covs[i, :, :] = np.eye(data_array.shape[1])
+        self.graph = pt.graph
+        self.node_positions = self._pt.node_positions
 
-        self._coord_asc_loop(data_array, init_means, init_covs)
+        if self.cov_indices is None:
+            cov_indices = np.arange(0, n_samples)
+        else:
+            cov_indices = self.cov_indices
+        if not self.just_tree:
+            self.means, self.covariances = self._calculate_gaussian_params(data_array, 
+                                                                        self._pt._probabilities,
+                                                                     cov_indices)
 
-    def _calculate_node_distances(self, tree):
-        shortest_paths = nx.all_pairs_shortest_path_length(self.tree)
-        node_distances = np.zeros([self.num_nodes, self.num_nodes])
-        for i in xrange(self.num_nodes):
-            for j in xrange(self.num_nodes):
-                node_distances[i, j] = shortest_paths[i][j]
-        del(shortest_paths)
-        node_distances /= node_distances.max()
-        return node_distances
 
-    def smooth(self, means, covariances):
-        #TODO Need to think how to smooth properly: probably by taking N nearest neighbors on
-        # tree and doing some spline fitting
-        return means, covariances
-
-    def _map_samples_to_nodes(self, data_array, means, covs):
+    def _map_samples_to_nodes(self, 
+                              data_array, 
+                              means, 
+                              covs):
         mapping = np.zeros([data_array.shape[0]]) - 1
         mapping_probs = np.zeros([data_array.shape[0], means.shape[0]])
         for i in xrange(means.shape[0]):
-            mapping_probs[:, i] = stats.multivariate_normal.pdf(data_array, mean=means[i, :], 
-                                                                   cov=covs[i, :, :], allow_singular=True)
+            mapping_probs[:, i] = stats.multivariate_normal.pdf(data_array[:, self.cov_indices], 
+                                                                mean=means[i, self.cov_indices], 
+                                                                cov=covs[i, :, :], allow_singular=True)
         
         for i in xrange(data_array.shape[0]):
             mapping[i] = np.argmax(mapping_probs[i, :])
         return mapping, mapping_probs
 
-    
-    def _calculate_gaussian_params_from_mapping(self, data_array, mapping, mapping_probs):
-        means = np.zeros([self.num_nodes, data_array.shape[1]])
-        covariances = np.zeros([self.num_nodes, data_array.shape[1], data_array.shape[1]])
-        n_samples = mapping_probs.shape[0]
-        normalized_probs = mapping_probs / mapping_probs.sum(axis=1)[:, None]
-        for i in xrange(self.num_nodes):
-            expected_distances = np.array([np.dot(normalized_probs[j, :], self.node_distances[i, :])
-                                           for j in range(n_samples)])
-            #distances = np.array([self.node_distances[i, j] for j in mapping])
-            
-            #weights = np.exp(-0.5*(expected_distances/(self.step_size))**2)
-            weights = 1./((1 + expected_distances)**2 * self.step_size)
+    def _calculate_gaussian_params(self, 
+                                   data_array, 
+                                   mapping_probs, 
+                                   cov_indices):
+        means = np.zeros([self.n_nodes, data_array.shape[1]])
+        cov_dim = len(cov_indices)
+        covariances = np.zeros([self.n_nodes, cov_dim, cov_dim])
+        for i in xrange(self.n_nodes):
+            weights = mapping_probs[:, i]
             weights = np.reshape(weights, [len(weights), 1])
-            weights /= weights.sum()
             weighted_data = weights * data_array
             means[i, :] = weighted_data.sum(axis=0)
             if self.cov_reg is None:
-                covariances[i, :, :] = np.copy(corpcor.cov_shrink(data_array, weights=weights))
+                covariances[i, :, :] = np.copy(corpcor.cov_shrink(data_array[:, cov_indices], 
+                                                                  weights=weights))
             else:
-                covariances[i, :, :] = np.copy(corpcor.cov_shrink(data_array, weights=weights, 
+                covariances[i, :, :] = np.copy(corpcor.cov_shrink(data_array[: cov_indices],
+                                                                  weights=weights, 
                                                                   **{'lambda':self.cov_reg}))
-        return self.smooth(means, covariances)
-
-        
-    def _coord_asc_loop(self, data_array, init_means, init_covs):
-        curr_mapping, curr_mapping_probs = self._map_samples_to_nodes(data_array,
-                                                                      init_means, init_covs)
-        for i in xrange(self.max_iter):
-            print('ITER %s' % i)
-            curr_means, curr_covs = self._calculate_gaussian_params_from_mapping(data_array, 
-                                                                                 curr_mapping, 
-                                                                                 curr_mapping_probs)
-            prev_mapping_probs = curr_mapping_probs
-            curr_mapping, curr_mapping_probs = self._map_samples_to_nodes(data_array, 
-                                                                          curr_means, curr_covs)
-            if ((prev_mapping_probs - curr_mapping_probs)**2).sum() < self.tol:
-                break
-        self.mean = curr_means
-        self.covariances = curr_covs
-        self.mapping_probs = curr_mapping_probs
+        return means, covariances
 
 
     def predict_proba(self, data_array):
-        mapping, mapping_probs = self._map_samples_to_nodes(data_array, self.means, self.covs)
+        mapping, mapping_probs = self._map_samples_to_nodes(data_array, 
+                                                            self.means, 
+                                                            self.covs)
         return mapping, mapping_probs
 
     def predict(self, data_array):
-        mapping, _ = self.predict_proba(data_array, self.means, self.covs)
+        mapping, _ = self.predict_proba(data_array, 
+                                        self.means, 
+                                        self.covs)
         return mapping
