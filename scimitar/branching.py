@@ -247,7 +247,7 @@ class BranchedEmbeddedGaussians(object):
         self.node_positions = self._pt.node_positions
 
         if self.cov_indices is None:
-            cov_indices = np.arange(0, n_samples)
+            cov_indices = np.arange(0, n_dims)
         else:
             cov_indices = self.cov_indices
         if not self.just_tree:
@@ -262,12 +262,12 @@ class BranchedEmbeddedGaussians(object):
                               covs):
         mapping = np.zeros([data_array.shape[0]]) - 1
         mapping_probs = np.zeros([data_array.shape[0], means.shape[0]])
-        for i in xrange(means.shape[0]):
+        for i in range(means.shape[0]):
             mapping_probs[:, i] = stats.multivariate_normal.pdf(data_array[:, self.cov_indices], 
                                                                 mean=means[i, self.cov_indices], 
                                                                 cov=covs[i, :, :], allow_singular=True)
         
-        for i in xrange(data_array.shape[0]):
+        for i in range(data_array.shape[0]):
             mapping[i] = np.argmax(mapping_probs[i, :])
         return mapping, mapping_probs
 
@@ -278,11 +278,11 @@ class BranchedEmbeddedGaussians(object):
         means = np.zeros([self.n_nodes, data_array.shape[1]])
         cov_dim = len(cov_indices)
         covariances = np.zeros([self.n_nodes, cov_dim, cov_dim])
-        for i in xrange(self.n_nodes):
+        for i in range(self.n_nodes):
             weights = mapping_probs[:, i]
             weights = np.reshape(weights, [len(weights), 1])
             weighted_data = weights * data_array
-            means[i, :] = weighted_data.sum(axis=0)
+            means[i, :] = weighted_data.sum(axis=0) / mapping_probs[:,i].sum()
             if self.cov_reg is None:
                 covariances[i, :, :] = np.copy(corpcor.cov_shrink(data_array[:, cov_indices], 
                                                                   weights=weights))
