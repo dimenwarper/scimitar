@@ -1,15 +1,16 @@
 <img src="https://github.com/dimenwarper/scimitar/raw/master/logo.png" width="300">
+
 ## Single Cell Inference of MorphIng Trajectories and their Associated Regulation module
 
 SCIMITAR provides a variety of tools to analyze trajectory maps of single-cell measurements. 
 
 With SCIMITAR you can:
 * Obtain coarse-grain, (metastable) state and transition representations of your data. This is useful when you want to get a broad sense of how your data is connected.
-* Infer full-fledged Gaussian distribution trajectories from single-cell data --- not only will you get cell orderings and estiamted 'pseudotemporal' mean measurements but also pseudo-time-dependant covariance matrices so you can track how your measurements' correlation change across biological progression.
-* Obtain uncertainties for a cell's psuedotemporal positioning (due to uncertainty arising from heteroscedastic noise)
+* Infer full-fledged Gaussian distribution trajectories from single-cell data --- not only will you get cell orderings and estimated 'pseudotemporal' mean measurements but also pseudo-time-dependant covariance matrices so you can track how your measurements' correlation change across biological progression.
+* Obtain uncertainties for a cell's pseudotemporal positioning (due to uncertainty arising from heteroscedastic noise)
 * Obtain genes that significantly change throughout the progression (i.e. 'progression-associated genes')
 * Obtain genes that significantly change their correlation structure throughout the progression (i.e. 'progression co-associated genes')
-* Infer broad co-regulatory states and psuedotemporal dynamic gene modules from the evolving co-expression matrices.
+* Infer broad co-regulatory states and pseudotemporal dynamic gene modules from the evolving co-expression matrices.
 
 
 To install SCIMITAR, follow the steps below:
